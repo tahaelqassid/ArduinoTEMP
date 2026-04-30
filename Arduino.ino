@@ -1,79 +1,118 @@
 #include <DHT.h>
-#include <LiquidCrystal.h>
+#include <LiquidCrystal_I2C.h>
 
-#define DHTPIN 7     
-#define DHTTYPE DHT11   // DHT11 sensor
+#define DHTPIN    2
+#define DHTTYPE   DHT11
+#define GREENLED  6
+#define YELLOWLED 7
+#define REDLED    8
+#define BUZZER    9
+
+#define TEMP_NORMAL 30.0
+#define TEMP_WARM   31.0
+
 DHT dht(DHTPIN, DHTTYPE);
+LiquidCrystal_I2C lcd(0x27, 16, 2);
 
-LiquidCrystal lcd(12, 11, 5, 4, 3, 2);
-
-#define LED1_PIN 8
-#define LED2_PIN 9
-#define LED3_PIN 10
-#define LED4_PIN 13
-#define ACTIVE_BUZZER_PIN 6
-#define PASSIVE_BUZZER_PIN A0
+void allLedsOff() {
+  digitalWrite(GREENLED,  LOW);
+  digitalWrite(YELLOWLED, LOW);
+  digitalWrite(REDLED,    LOW);
+  noTone(BUZZER);
+  digitalWrite(BUZZER, LOW);
+}
 
 void setup() {
-  lcd.begin(16, 2);
+  Serial.begin(9600);
   dht.begin();
 
-  pinMode(LED1_PIN, OUTPUT);
-  pinMode(LED2_PIN, OUTPUT);
-  pinMode(LED3_PIN, OUTPUT);
-  pinMode(LED4_PIN, OUTPUT);
-  pinMode(ACTIVE_BUZZER_PIN, OUTPUT);
-  pinMode(PASSIVE_BUZZER_PIN, OUTPUT);
+  pinMode(GREENLED,  OUTPUT);
+  pinMode(YELLOWLED, OUTPUT);
+  pinMode(REDLED,    OUTPUT);
+  pinMode(BUZZER,    OUTPUT);
 
-  Serial.begin(9600);
+  allLedsOff();
+
+  lcd.init();
+  lcd.backlight();
+
+  lcd.setCursor(0, 0);
+  lcd.print("  Temp  Alarm   ");
+  lcd.setCursor(0, 1);
+  lcd.print("   Starting...  ");
+  delay(2000);
+  lcd.clear();
 }
 
 void loop() {
-  float h = dht.readHumidity();
-  float t = dht.readTemperature();
+  float temp = dht.readTemperature();
+  float hum  = dht.readHumidity();
 
-  if (isnan(h) || isnan(t)) {
+  if (isnan(temp) || isnan(hum)) {
+    allLedsOff();
     lcd.setCursor(0, 0);
-    lcd.print("Error Reading ");
+    lcd.print("Sensor Error!   ");
+    lcd.setCursor(0, 1);
+    lcd.print("Check DHT11 !!  ");
+    Serial.println("ERROR: DHT11 read failed");
+    delay(2000);
     return;
   }
 
   lcd.setCursor(0, 0);
   lcd.print("Temp: ");
-  lcd.print(t);
-  lcd.print("C");
+  lcd.print(temp, 1);
+  lcd.print((char)223);
+  lcd.print("C   ");
 
-  lcd.setCursor(0, 1);
-  lcd.print("Humidity: ");
-  lcd.print(h);
-  lcd.print("%");
+  lcd.setCursor(8, 0);
+  lcd.print("H:");
+  lcd.print(hum, 0);
+  lcd.print("%  ");
 
-  if (t < 25) {
-    digitalWrite(LED1_PIN, HIGH);  // Room temp
-    digitalWrite(LED2_PIN, LOW);
-    digitalWrite(LED3_PIN, LOW);
-    digitalWrite(LED4_PIN, LOW);
-    digitalWrite(ACTIVE_BUZZER_PIN, LOW);
-  } else if (t >= 25 && t < 30) {
-    digitalWrite(LED1_PIN, LOW);
-    digitalWrite(LED2_PIN, HIGH);  // Warm
-    digitalWrite(LED3_PIN, LOW);
-    digitalWrite(LED4_PIN, LOW);
-    digitalWrite(ACTIVE_BUZZER_PIN, LOW);
-  } else if (t >= 30 && t < 35) {
-    digitalWrite(LED1_PIN, LOW);
-    digitalWrite(LED2_PIN, LOW);
-    digitalWrite(LED3_PIN, HIGH);  // Hot
-    digitalWrite(LED4_PIN, LOW);
-    digitalWrite(ACTIVE_BUZZER_PIN, HIGH); //active buzzer
-  } else {
-    digitalWrite(LED1_PIN, LOW);
-    digitalWrite(LED2_PIN, LOW);
-    digitalWrite(LED3_PIN, LOW);
-    digitalWrite(LED4_PIN, HIGH);  // Very hot
-    digitalWrite(ACTIVE_BUZZER_PIN, HIGH);
-    tone(PASSIVE_BUZZER_PIN, 1000); // active + passive
+  Serial.print("Temp: "); Serial.print(temp);
+  Serial.print("C  |  Hum: "); Serial.print(hum);
+  Serial.println("%");
+
+  if (temp < TEMP_NORMAL) {
+    allLedsOff();
+    digitalWrite(BUZZER, LOW);
+    lcd.setCursor(0, 1);
+    lcd.print("Status: NORMAL  ");
+    Serial.println("Status: NORMAL");
+
+    digitalWrite(GREENLED, HIGH);
+    delay(900);
+    digitalWrite(GREENLED, LOW);
+    delay(100);
   }
 
-  delay(2000);
+  else if (temp >= TEMP_NORMAL && temp < TEMP_WARM) {
+    allLedsOff();
+    digitalWrite(BUZZER, LOW);
+    lcd.setCursor(0, 1);
+    lcd.print("Status: WARM    ");
+    Serial.println("Status: WARM");
+
+    digitalWrite(YELLOWLED, HIGH);
+    delay(400);
+    digitalWrite(YELLOWLED, LOW);
+    delay(100);
+  }
+
+  else {
+    allLedsOff();
+    lcd.setCursor(0, 1);
+    lcd.print("!! HIGH ALERT !!");
+    Serial.println("Status: HIGH ALERT !!!");
+
+    for (int i = 0; i < 3; i++) {
+      digitalWrite(REDLED, HIGH);
+      digitalWrite(BUZZER, HIGH);
+      delay(200);
+      digitalWrite(REDLED, LOW);
+      digitalWrite(BUZZER, LOW);
+      delay(200);
+    }
+  }
 }
